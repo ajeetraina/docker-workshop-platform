@@ -15,6 +15,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./database/seeds/sample_data.sql:/docker-entrypoint-initdb.d/02-sample_data.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U workshop_user -d workshop_platform"]
       interval: 10s
