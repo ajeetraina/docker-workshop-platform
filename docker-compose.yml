@@ -1,17 +1,21 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database
+  # PostgreSQL Database - Optimized for Apple Silicon
   postgres:
     image: postgres:15-alpine
+    platform: linux/amd64  # Force x86_64 for better compatibility
     container_name: workshop-postgres
     environment:
       POSTGRES_DB: workshop_platform
       POSTGRES_USER: workshop_user
       POSTGRES_PASSWORD: workshop_pass
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+      # Add these for better compatibility
+      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_LOGGING_COLLECTOR: "on"
     ports:
-      - "5433:5432"  # Changed from 5432:5432 to avoid conflict
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
@@ -19,27 +23,32 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U workshop_user -d workshop_platform"]
       interval: 10s
-      timeout: 5s
+      timeout: 10s
       retries: 5
+      start_period: 30s
     networks:
       - workshop-network
+    restart: unless-stopped
 
-  # Redis Cache
+  # Redis Cache - Force platform for consistency
   redis:
     image: redis:7-alpine
+    platform: linux/amd64
     container_name: workshop-redis
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --bind 0.0.0.0
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
-      timeout: 3s
+      timeout: 5s
       retries: 5
+      start_period: 10s
     networks:
       - workshop-network
+    restart: unless-stopped
 
   # Backend API
   backend:
@@ -73,9 +82,11 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
+      start_period: 45s
     networks:
       - workshop-network
+    restart: unless-stopped
     command: npm run dev
 
   # Frontend React App
@@ -105,14 +116,17 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:3000"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
+      start_period: 60s
     networks:
       - workshop-network
+    restart: unless-stopped
     command: npm run dev
 
   # Adminer for database management
   adminer:
     image: adminer:4
+    platform: linux/amd64
     container_name: workshop-adminer
     ports:
       - "8080:8080"
@@ -125,10 +139,12 @@ services:
       - postgres
     networks:
       - workshop-network
+    restart: unless-stopped
 
   # Redis Commander for Redis management
   redis-commander:
     image: rediscommander/redis-commander:latest
+    platform: linux/amd64
     container_name: workshop-redis-commander
     environment:
       REDIS_HOSTS: local:redis:6379
@@ -138,6 +154,7 @@ services:
       - redis
     networks:
       - workshop-network
+    restart: unless-stopped
 
 volumes:
   postgres_data:
