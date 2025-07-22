@@ -101,7 +101,8 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', authMiddleware, userRoutes);
 app.use('/api/courses', courseRoutes);
-app.use('/api/labs', labRoutes);
+app.use('/api', labRoutes); // Mount lab routes at /api level for /api/courses/:courseId/labs
+app.use('/api/labs', labRoutes); // Also mount at /api/labs for direct lab access
 app.use('/api/workshops', authMiddleware, workshopRoutes);
 app.use('/api/progress', authMiddleware, progressRoutes);
 
