@@ -1,0 +1,226 @@
+import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+import { config } from '@/config/env';
+import { logger } from '@/utils/logger';
+
+// Extend Request interface to include user
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        id: string;
+        email: string;
+        username: string;
+        role: 'student' | 'instructor' | 'admin';
+      };
+    }
+  }
+}
+
+export interface JWTPayload {
+  id: string;
+  email: string;
+  username: string;
+  role: 'student' | 'instructor' | 'admin';
+  iat?: number;
+  exp?: number;
+}
+
+/**
+ * Middleware to authenticate JWT tokens
+ */
+export const authMiddleware = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith('Bearer ') 
+      ? authHeader.slice(7)
+      : req.cookies?.accessToken;
+
+    if (!token) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'No authentication token provided',
+      });
+      return;
+    }
+
+    try {
+      const decoded = jwt.verify(token, config.jwt.secret) as JWTPayload;
+      
+      // Add user to request
+      req.user = {
+        id: decoded.id,
+        email: decoded.email,
+        username: decoded.username,
+        role: decoded.role,
+      };
+
+      next();
+    } catch (jwtError) {
+      logger.warn('Invalid JWT token:', jwtError);
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Invalid or expired token',
+      });
+      return;
+    }
+  } catch (error) {
+    logger.error('Auth middleware error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Authentication error',
+    });
+  }
+};
+
+/**
+ * Middleware to check if user has required role
+ */
+export const requireRole = (roles: string | string[]) => {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Authentication required',
+      });
+      return;
+    }
+
+    const allowedRoles = Array.isArray(roles) ? roles : [roles];
+    
+    if (!allowedRoles.includes(req.user.role)) {
+      res.status(403).json({
+        error: 'Forbidden',
+        message: 'Insufficient permissions',
+      });
+      return;
+    }
+
+    next();
+  };
+};
+
+/**
+ * Middleware to check if user is admin
+ */
+export const requireAdmin = requireRole('admin');
+
+/**
+ * Middleware to check if user is instructor or admin
+ */
+export const requireInstructor = requireRole(['instructor', 'admin']);
+
+/**
+ * Optional authentication middleware - doesn't fail if no token
+ */
+export const optionalAuth = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith('Bearer ') 
+      ? authHeader.slice(7)
+      : req.cookies?.accessToken;
+
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, config.jwt.secret) as JWTPayload;
+        req.user = {
+          id: decoded.id,
+          email: decoded.email,
+          username: decoded.username,
+          role: decoded.role,
+        };
+      } catch (jwtError) {
+        // Token invalid, but continue without user
+        logger.debug('Invalid token in optional auth:', jwtError);
+      }
+    }
+
+    next();
+  } catch (error) {
+    logger.error('Optional auth middleware error:', error);
+    next(); // Continue without authentication
+  }
+};
+
+/**
+ * Generate JWT token for user
+ */
+export const generateTokens = (user: {
+  id: string;
+  email: string;
+  username: string;
+  role: 'student' | 'instructor' | 'admin';
+}): { accessToken: string; refreshToken: string } => {
+  const payload: JWTPayload = {
+    id: user.id,
+    email: user.email,
+    username: user.username,
+    role: user.role,
+  };
+
+  const accessToken = jwt.sign(payload, config.jwt.secret, {
+    expiresIn: config.jwt.expiresIn,
+  });
+
+  const refreshToken = jwt.sign(
+    { id: user.id },
+    config.jwt.secret,
+    { expiresIn: config.jwt.refreshExpiresIn }
+  );
+
+  return { accessToken, refreshToken };
+};
+
+/**
+ * Verify refresh token
+ */
+export const verifyRefreshToken = (token: string): { id: string } | null => {
+  try {
+    const decoded = jwt.verify(token, config.jwt.secret) as { id: string };
+    return decoded;
+  } catch (error) {
+    logger.warn('Invalid refresh token:', error);
+    return null;
+  }
+};
+
+/**
+ * Set authentication cookies
+ */
+export const setAuthCookies = (
+  res: Response,
+  accessToken: string,
+  refreshToken: string
+): void => {
+  const isProduction = config.env === 'production';
+  
+  res.cookie('accessToken', accessToken, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'strict' : 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  });
+
+  res.cookie('refreshToken', refreshToken, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'strict' : 'lax',
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+  });
+};
+
+/**
+ * Clear authentication cookies
+ */
+export const clearAuthCookies = (res: Response): void => {
+  res.clearCookie('accessToken');
+  res.clearCookie('refreshToken');
+};
