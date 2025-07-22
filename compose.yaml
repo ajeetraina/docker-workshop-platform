@@ -54,7 +54,7 @@ services:
       DATABASE_URL: postgresql://workshop_user:workshop_pass@postgres:5432/workshop_platform
       REDIS_URL: redis://redis:6379
       JWT_SECRET: your-super-secret-jwt-key-minimum-32-characters-long-for-development
-      FRONTEND_URL: http://localhost:3000
+      FRONTEND_URL: http://localhost:3004
       ENABLE_DEBUG_LOGS: "true"
       MOCK_WORKSHOPS: "true"
     ports:
@@ -89,7 +89,7 @@ services:
       VITE_API_URL: http://localhost:8000/api
       NODE_ENV: development
     ports:
-      - "3000:3000"
+      - "3004:3000"
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/public:/app/public
@@ -102,7 +102,7 @@ services:
     depends_on:
       - backend
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      test: ["CMD", "curl", "-f", "http://localhost:3004"]
       interval: 30s
       timeout: 10s
       retries: 3
