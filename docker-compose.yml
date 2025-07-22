@@ -1,0 +1,155 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: workshop-postgres
+    environment:
+      POSTGRES_DB: workshop_platform
+      POSTGRES_USER: workshop_user
+      POSTGRES_PASSWORD: workshop_pass
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+    ports:
+      - "5433:5432"  # Changed from 5432:5432 to avoid conflict
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./database/seeds/sample_data.sql:/docker-entrypoint-initdb.d/02-sample_data.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U workshop_user -d workshop_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - workshop-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: workshop-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - workshop-network
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: workshop-backend
+    environment:
+      NODE_ENV: development
+      PORT: 8000
+      DATABASE_URL: postgresql://workshop_user:workshop_pass@postgres:5432/workshop_platform
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: your-super-secret-jwt-key-minimum-32-characters-long-for-development
+      FRONTEND_URL: http://localhost:3000
+      ENABLE_DEBUG_LOGS: "true"
+      MOCK_WORKSHOPS: "true"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/package.json:/app/package.json
+      - ./backend/tsconfig.json:/app/tsconfig.json
+      - backend_node_modules:/app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - workshop-network
+    command: npm run dev
+
+  # Frontend React App
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: workshop-frontend
+    environment:
+      VITE_API_URL: http://localhost:8000/api
+      NODE_ENV: development
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/package.json:/app/package.json
+      - ./frontend/vite.config.ts:/app/vite.config.ts
+      - ./frontend/tailwind.config.js:/app/tailwind.config.js
+      - ./frontend/tsconfig.json:/app/tsconfig.json
+      - frontend_node_modules:/app/node_modules
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - workshop-network
+    command: npm run dev
+
+  # Adminer for database management
+  adminer:
+    image: adminer:4
+    container_name: workshop-adminer
+    ports:
+      - "8080:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DEFAULT_USER: workshop_user
+      ADMINER_DEFAULT_PASSWORD: workshop_pass
+      ADMINER_DEFAULT_DB: workshop_platform
+    depends_on:
+      - postgres
+    networks:
+      - workshop-network
+
+  # Redis Commander for Redis management
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: workshop-redis-commander
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - workshop-network
+
+volumes:
+  postgres_data:
+    name: workshop_postgres_data
+  redis_data:
+    name: workshop_redis_data
+  backend_node_modules:
+    name: workshop_backend_node_modules
+  frontend_node_modules:
+    name: workshop_frontend_node_modules
+
+networks:
+  workshop-network:
+    name: workshop-network
+    driver: bridge
