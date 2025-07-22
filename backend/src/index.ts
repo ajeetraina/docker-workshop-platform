@@ -6,6 +6,7 @@ import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
+import { Server } from 'http';
 
 // Import configurations and middleware
 import { config } from '@/config/env';
@@ -29,6 +30,9 @@ dotenv.config();
 
 // Create Express application
 const app = express();
+
+// Declare server variable at module level
+let server: Server;
 
 // Trust proxy for accurate IP addresses behind load balancers
 app.set('trust proxy', 1);
@@ -122,12 +126,17 @@ app.use(errorHandler);
 const gracefulShutdown = (signal: string) => {
   logger.info(`Received ${signal}. Starting graceful shutdown...`);
   
-  server.close(() => {
-    logger.info('HTTP server closed.');
-    
-    // Close database connections, cleanup resources, etc.
+  if (server) {
+    server.close(() => {
+      logger.info('HTTP server closed.');
+      
+      // Close database connections, cleanup resources, etc.
+      process.exit(0);
+    });
+  } else {
+    logger.info('Server not yet initialized, exiting...');
     process.exit(0);
-  });
+  }
   
   // Force close after 30 seconds
   setTimeout(() => {
@@ -153,14 +162,14 @@ process.on('uncaughtException', (error) => {
 });
 
 // Start server
-const startServer = async () => {
+const startServer = async (): Promise<Server> => {
   try {
     // Initialize database connection
     await initializeDatabase();
     logger.info('Database connection established');
     
     // Start HTTP server
-    const server = app.listen(config.port, () => {
+    server = app.listen(config.port, () => {
       logger.info(`🚀 Docker Workshop Platform API started on port ${config.port}`);
       logger.info(`📚 Environment: ${config.env}`);
       logger.info(`🔗 Frontend URL: ${config.frontend.url}`);
@@ -174,13 +183,16 @@ const startServer = async () => {
   }
 };
 
-// Export app for testing and server for graceful shutdown
+// Export app for testing
 export { app };
 
 // Start server if this file is executed directly
 if (require.main === module) {
-  startServer();
+  startServer().catch((error) => {
+    logger.error('Failed to start server:', error);
+    process.exit(1);
+  });
 }
 
-const server = startServer();
-export { server };
+// Export startServer function for external use
+export { startServer };
