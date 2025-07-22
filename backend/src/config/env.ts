@@ -24,7 +24,7 @@ export const config = {
   
   // Frontend
   frontend: {
-    url: process.env.FRONTEND_URL || 'http://localhost:3000',
+    url: process.env.FRONTEND_URL || 'http://localhost:3004',
   },
   
   // Database
@@ -86,7 +86,7 @@ export const config = {
     bcryptRounds: parseInt(process.env.BCRYPT_ROUNDS || '12', 10),
     rateLimitWindowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10), // 15 minutes
     rateLimitMax: parseInt(process.env.RATE_LIMIT_MAX || '100', 10),
-    corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000'],
+    corsOrigins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3004'],
   },
   
   // Development
@@ -112,7 +112,7 @@ export const validateConfig = (): void => {
   }
   
   // Validate Redis configuration
-  if (!config.redis.url.startsWith('redis://') && !config.redis.url.startsWith('rediss://')) {
+  if (!config.redis.url.startsWith('redis://') && !config.redis.url.startsWith('rediss://') && !config.redis.url.startsWith('redis:')) {
     throw new Error('REDIS_URL must be a valid Redis connection string');
   }
   
