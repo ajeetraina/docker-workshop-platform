@@ -128,7 +128,7 @@ services:
 
   # Redis Commander for Redis management
   redis-commander:
-    image: rediscommander/redis-commander:latest
+    image: visol/redis-commander:0.8.0 
     container_name: workshop-redis-commander
     environment:
       REDIS_HOSTS: local:redis:6379

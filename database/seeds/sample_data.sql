@@ -121,8 +121,8 @@ SELECT
     (SELECT id FROM users WHERE email = 'demo@docker.com'),
     l.id,
     CASE 
-        WHEN l.order_number <= 3 THEN 'completed'
-        WHEN l.order_number = 4 THEN 'in_progress'
+        WHEN l.order_number <= 3 THEN 'completed'::lab_status
+        WHEN l.order_number = 4 THEN 'in_progress'::lab_status
         ELSE 'not_started'
     END as status,
     CASE 
