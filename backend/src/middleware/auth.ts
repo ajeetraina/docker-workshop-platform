@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import { config } from '@/config/env';
 import { logger } from '@/utils/logger';
 
@@ -166,14 +166,21 @@ export const generateTokens = (user: {
     role: user.role,
   };
 
-  const accessToken = jwt.sign(payload, config.jwt.secret, {
+  // Explicitly type the JWT sign options for strict TypeScript compatibility
+  const accessTokenOptions: SignOptions = {
     expiresIn: config.jwt.expiresIn,
-  });
+  };
+
+  const refreshTokenOptions: SignOptions = {
+    expiresIn: config.jwt.refreshExpiresIn,
+  };
+
+  const accessToken = jwt.sign(payload, config.jwt.secret, accessTokenOptions);
 
   const refreshToken = jwt.sign(
     { id: user.id },
     config.jwt.secret,
-    { expiresIn: config.jwt.refreshExpiresIn }
+    refreshTokenOptions
   );
 
   return { accessToken, refreshToken };
