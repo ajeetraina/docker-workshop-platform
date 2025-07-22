@@ -166,13 +166,13 @@ export const generateTokens = (user: {
     role: user.role,
   };
 
-  // Explicitly type and cast the JWT sign options for strict TypeScript compatibility
+  // Explicitly type the JWT sign options for strict TypeScript compatibility
   const accessTokenOptions: SignOptions = {
-    expiresIn: config.jwt.expiresIn as string,
+    expiresIn: config.jwt.expiresIn,
   };
 
   const refreshTokenOptions: SignOptions = {
-    expiresIn: config.jwt.refreshExpiresIn as string,
+    expiresIn: config.jwt.refreshExpiresIn,
   };
 
   const accessToken = jwt.sign(payload, config.jwt.secret, accessTokenOptions);
