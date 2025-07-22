@@ -15,7 +15,8 @@ FROM base AS development
 ENV NODE_ENV=development
 
 # Install all dependencies (including dev dependencies)
-RUN npm ci
+# Use npm install since we might not have package-lock.json initially
+RUN npm install
 
 # Copy source code
 COPY . .
@@ -35,14 +36,14 @@ FROM base AS production-deps
 ENV NODE_ENV=production
 
 # Install only production dependencies
-RUN npm ci --only=production && npm cache clean --force
+RUN npm install --only=production && npm cache clean --force
 
 # Build stage
 FROM base AS build
 ENV NODE_ENV=production
 
 # Install all dependencies for building
-RUN npm ci
+RUN npm install
 
 # Copy source code
 COPY . .
