@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction, CookieOptions } from 'express';
 import jwt, { SignOptions } from 'jsonwebtoken';
 import { config } from '@/config/env';
 import { logger } from '@/utils/logger';
@@ -25,6 +25,12 @@ export interface JWTPayload {
   iat?: number;
   exp?: number;
 }
+
+// Cookie constants with explicit typing
+const COOKIE_MAX_AGE = {
+  ACCESS_TOKEN: 7 * 24 * 60 * 60 * 1000 as number, // 7 days
+  REFRESH_TOKEN: 30 * 24 * 60 * 60 * 1000 as number, // 30 days
+} as const;
 
 /**
  * Middleware to authenticate JWT tokens
@@ -209,19 +215,22 @@ export const setAuthCookies = (
 ): void => {
   const isProduction = config.env === 'production';
   
-  res.cookie('accessToken', accessToken, {
+  const accessTokenOptions: CookieOptions = {
     httpOnly: true,
     secure: isProduction,
     sameSite: isProduction ? 'strict' : 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-  });
+    maxAge: COOKIE_MAX_AGE.ACCESS_TOKEN,
+  };
 
-  res.cookie('refreshToken', refreshToken, {
+  const refreshTokenOptions: CookieOptions = {
     httpOnly: true,
     secure: isProduction,
     sameSite: isProduction ? 'strict' : 'lax',
-    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-  });
+    maxAge: COOKIE_MAX_AGE.REFRESH_TOKEN,
+  };
+
+  res.cookie('accessToken', accessToken, accessTokenOptions);
+  res.cookie('refreshToken', refreshToken, refreshTokenOptions);
 };
 
 /**
