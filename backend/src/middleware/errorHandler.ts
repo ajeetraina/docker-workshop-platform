@@ -26,7 +26,11 @@ export class CustomError extends Error implements AppError {
     
     this.statusCode = statusCode;
     this.isOperational = isOperational;
-    this.code = code;
+    
+    // Handle optional code parameter explicitly for strict TypeScript
+    if (code !== undefined) {
+      this.code = code;
+    }
     
     // Maintain proper stack trace for where our error was thrown
     Error.captureStackTrace(this, this.constructor);
@@ -143,8 +147,9 @@ const sendErrorResponse = (error: AppError, req: Request, res: Response): void =
   }
 
   // Add request ID if available
-  if (req.headers['x-request-id']) {
-    errorResponse.requestId = req.headers['x-request-id'];
+  const requestId = req.headers['x-request-id'];
+  if (requestId && typeof requestId === 'string') {
+    errorResponse.requestId = requestId;
   }
 
   // Include stack trace in development
@@ -184,15 +189,18 @@ const getErrorName = (statusCode: number): string => {
  * Log error with appropriate level
  */
 const logError = (error: AppError, req: Request): void => {
+  const userAgent = req.headers['user-agent'];
+  const userId = (req as any).user?.id;
+
   const logData = {
     message: error.message,
     statusCode: error.statusCode,
     code: error.code,
     path: req.originalUrl,
     method: req.method,
-    userAgent: req.headers['user-agent'],
+    userAgent: typeof userAgent === 'string' ? userAgent : undefined,
     ip: req.ip,
-    userId: req.user?.id,
+    userId: userId || undefined,
     stack: error.stack,
   };
 
