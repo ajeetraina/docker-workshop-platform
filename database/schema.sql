@@ -214,7 +214,7 @@ SELECT
     COUNT(l.id) as total_labs,
     COUNT(CASE WHEN ulp.status = 'completed' THEN 1 END) as completed_labs,
     ROUND(
-        (COUNT(CASE WHEN ulp.status = 'completed' THEN 1 END)::FLOAT / COUNT(l.id)) * 100, 
+        (COUNT(CASE WHEN ulp.status = 'completed' THEN 1 END)::NUMERIC / NULLIF(COUNT(l.id), 0)) * 100, 
         2
     ) as completion_percentage,
     e.enrolled_at,
@@ -230,11 +230,11 @@ GROUP BY e.user_id, e.course_id, c.title, c.slug, e.enrolled_at, e.last_accessed
 CREATE VIEW user_dashboard_stats AS
 SELECT 
     u.id as user_id,
-    COUNT(DISTINCT e.course_id) as enrolled_courses,
-    COUNT(DISTINCT CASE WHEN cps.completion_percentage = 100 THEN e.course_id END) as completed_courses,
-    COUNT(DISTINCT ulp.lab_id) filter (WHERE ulp.status = 'completed') as completed_labs,
-    COUNT(DISTINCT ws.id) filter (WHERE ws.status = 'active') as active_sessions,
-    COUNT(DISTINCT ua.achievement_id) as earned_achievements
+    COALESCE(COUNT(DISTINCT e.course_id), 0) as enrolled_courses,
+    COALESCE(COUNT(DISTINCT CASE WHEN cps.completion_percentage = 100 THEN e.course_id END), 0) as completed_courses,
+    COALESCE(COUNT(DISTINCT ulp.lab_id) FILTER (WHERE ulp.status = 'completed'), 0) as completed_labs,
+    COALESCE(COUNT(DISTINCT ws.id) FILTER (WHERE ws.status = 'active'), 0) as active_sessions,
+    COALESCE(COUNT(DISTINCT ua.achievement_id), 0) as earned_achievements
 FROM users u
 LEFT JOIN enrollments e ON u.id = e.user_id
 LEFT JOIN course_progress_summary cps ON u.id = cps.user_id AND e.course_id = cps.course_id
