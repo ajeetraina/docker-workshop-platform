@@ -1,4 +1,4 @@
-
+version: '3.8'
 
 services:
   # PostgreSQL Database
@@ -77,21 +77,37 @@ services:
       - workshop-network
     command: npm run dev
 
-  # Frontend (placeholder for future development)
+  # Frontend React App
   frontend:
-    image: node:18-alpine
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
     container_name: workshop-frontend
-    working_dir: /app
     environment:
-      REACT_APP_API_URL: http://localhost:8000
+      VITE_API_URL: http://localhost:8000/api
+      NODE_ENV: development
     ports:
       - "3000:3000"
     volumes:
-      - ./frontend:/app
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/package.json:/app/package.json
+      - ./frontend/vite.config.ts:/app/vite.config.ts
+      - ./frontend/tailwind.config.js:/app/tailwind.config.js
+      - ./frontend/tsconfig.json:/app/tsconfig.json
       - frontend_node_modules:/app/node_modules
-    command: sh -c "echo 'Frontend will be implemented in Phase 2' && sleep infinity"
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
       - workshop-network
+    command: npm run dev
 
   # Adminer for database management
   adminer:
