@@ -1,9 +1,9 @@
-// @ts-nocheck
 import { Request, Response, NextFunction } from 'express';
 import jwt, { SignOptions } from 'jsonwebtoken';
 import { config } from '@/config/env';
 import { logger } from '@/utils/logger';
 
+// Extend Request interface to include user
 declare global {
   namespace Express {
     interface Request {
@@ -26,6 +26,9 @@ export interface JWTPayload {
   exp?: number;
 }
 
+/**
+ * Middleware to authenticate JWT tokens
+ */
 export const authMiddleware = async (
   req: Request,
   res: Response,
@@ -48,6 +51,7 @@ export const authMiddleware = async (
     try {
       const decoded = jwt.verify(token, config.jwt.secret) as JWTPayload;
       
+      // Add user to request
       req.user = {
         id: decoded.id,
         email: decoded.email,
@@ -73,6 +77,9 @@ export const authMiddleware = async (
   }
 };
 
+/**
+ * Middleware to check if user has required role
+ */
 export const requireRole = (roles: string | string[]) => {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.user) {
@@ -97,10 +104,19 @@ export const requireRole = (roles: string | string[]) => {
   };
 };
 
+/**
+ * Middleware to check if user is admin
+ */
 export const requireAdmin = requireRole('admin');
 
+/**
+ * Middleware to check if user is instructor or admin
+ */
 export const requireInstructor = requireRole(['instructor', 'admin']);
 
+/**
+ * Optional authentication middleware - doesn't fail if no token
+ */
 export const optionalAuth = async (
   req: Request,
   res: Response,
@@ -122,6 +138,7 @@ export const optionalAuth = async (
           role: decoded.role,
         };
       } catch (jwtError) {
+        // Token invalid, but continue without user
         logger.debug('Invalid token in optional auth:', jwtError);
       }
     }
@@ -129,10 +146,13 @@ export const optionalAuth = async (
     next();
   } catch (error) {
     logger.error('Optional auth middleware error:', error);
-    next();
+    next(); // Continue without authentication
   }
 };
 
+/**
+ * Generate JWT token for user
+ */
 export const generateTokens = (user: {
   id: string;
   email: string;
@@ -160,6 +180,9 @@ export const generateTokens = (user: {
   return { accessToken, refreshToken };
 };
 
+/**
+ * Verify refresh token
+ */
 export const verifyRefreshToken = (token: string): { id: string } | null => {
   try {
     const decoded = jwt.verify(token, config.jwt.secret) as { id: string };
@@ -170,16 +193,39 @@ export const verifyRefreshToken = (token: string): { id: string } | null => {
   }
 };
 
-export const setAuthCookies = (res: any, accessToken: string, refreshToken: string) => {
-  res.setHeader('Set-Cookie', [
-    'accessToken=' + accessToken + '; HttpOnly; Max-Age=604800; Path=/',
-    'refreshToken=' + refreshToken + '; HttpOnly; Max-Age=2592000; Path=/'
-  ]);
+/**
+ * Set authentication cookies - FIXED VERSION
+ */
+export const setAuthCookies = (
+  res: Response,
+  accessToken: string,
+  refreshToken: string
+): void => {
+  const isProduction = config.env === 'production';
+  
+  // Pre-calculated values to avoid TypeScript issues
+  const sevenDaysInMs = 604800000;
+  const thirtyDaysInMs = 2592000000;
+  
+  res.cookie('accessToken', accessToken, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'strict' : 'lax',
+    maxAge: sevenDaysInMs,
+  });
+
+  res.cookie('refreshToken', refreshToken, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'strict' : 'lax',
+    maxAge: thirtyDaysInMs,
+  });
 };
 
-export const clearAuthCookies = (res: any) => {
-  res.setHeader('Set-Cookie', [
-    'accessToken=; HttpOnly; Max-Age=0; Path=/',
-    'refreshToken=; HttpOnly; Max-Age=0; Path=/'
-  ]);
+/**
+ * Clear authentication cookies
+ */
+export const clearAuthCookies = (res: Response): void => {
+  res.clearCookie('accessToken');
+  res.clearCookie('refreshToken');
 };

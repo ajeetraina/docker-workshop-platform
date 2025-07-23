@@ -88,12 +88,7 @@ app.use(morgan('combined', {
 }));
 
 // Apply rate limiting to all requests
-// Rate limiting disabled in development
-if (process.env.NODE_ENV !== 'development') {
-  app.use(limiter);
-} else {
-  console.log('🔓 Rate limiting disabled in development mode');
-}
+app.use(limiter);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
