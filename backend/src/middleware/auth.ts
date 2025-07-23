@@ -1,185 +1,42 @@
-// @ts-nocheck
 import { Request, Response, NextFunction } from 'express';
-import jwt, { SignOptions } from 'jsonwebtoken';
-import { config } from '@/config/env';
-import { logger } from '@/utils/logger';
+import jwt from 'jsonwebtoken';
 
-declare global {
-  namespace Express {
-    interface Request {
-      user?: {
-        id: string;
-        email: string;
-        username: string;
-        role: 'student' | 'instructor' | 'admin';
-      };
-    }
+interface AuthenticatedRequest extends Request {
+  user?: {
+    id: string;
+    email: string;
+    username: string;
+    role: string;
+  };
+}
+
+export const authenticateToken = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' });
   }
-}
 
-export interface JWTPayload {
-  id: string;
-  email: string;
-  username: string;
-  role: 'student' | 'instructor' | 'admin';
-  iat?: number;
-  exp?: number;
-}
-
-export const authMiddleware = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
   try {
-    const authHeader = req.headers.authorization;
-    const token = authHeader?.startsWith('Bearer ') 
-      ? authHeader.slice(7)
-      : req.cookies?.accessToken;
-
-    if (!token) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'No authentication token provided',
-      });
-      return;
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      return res.status(500).json({ error: 'JWT secret not configured' });
     }
 
-    try {
-      const decoded = jwt.verify(token, config.jwt.secret) as JWTPayload;
-      
-      req.user = {
-        id: decoded.id,
-        email: decoded.email,
-        username: decoded.username,
-        role: decoded.role,
-      };
-
-      next();
-    } catch (jwtError) {
-      logger.warn('Invalid JWT token:', jwtError);
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'Invalid or expired token',
-      });
-      return;
-    }
-  } catch (error) {
-    logger.error('Auth middleware error:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Authentication error',
-    });
-  }
-};
-
-export const requireRole = (roles: string | string[]) => {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    if (!req.user) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'Authentication required',
-      });
-      return;
-    }
-
-    const allowedRoles = Array.isArray(roles) ? roles : [roles];
+    const decoded = jwt.verify(token, jwtSecret) as any;
+    req.user = {
+      id: decoded.id,
+      email: decoded.email,
+      username: decoded.username,
+      role: decoded.role
+    };
     
-    if (!allowedRoles.includes(req.user.role)) {
-      res.status(403).json({
-        error: 'Forbidden',
-        message: 'Insufficient permissions',
-      });
-      return;
-    }
-
-    next();
-  };
-};
-
-export const requireAdmin = requireRole('admin');
-
-export const requireInstructor = requireRole(['instructor', 'admin']);
-
-export const optionalAuth = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const authHeader = req.headers.authorization;
-    const token = authHeader?.startsWith('Bearer ') 
-      ? authHeader.slice(7)
-      : req.cookies?.accessToken;
-
-    if (token) {
-      try {
-        const decoded = jwt.verify(token, config.jwt.secret) as JWTPayload;
-        req.user = {
-          id: decoded.id,
-          email: decoded.email,
-          username: decoded.username,
-          role: decoded.role,
-        };
-      } catch (jwtError) {
-        logger.debug('Invalid token in optional auth:', jwtError);
-      }
-    }
-
     next();
   } catch (error) {
-    logger.error('Optional auth middleware error:', error);
-    next();
+    console.error('Token verification error:', error);
+    return res.status(403).json({ error: 'Invalid token' });
   }
 };
 
-export const generateTokens = (user: {
-  id: string;
-  email: string;
-  username: string;
-  role: 'student' | 'instructor' | 'admin';
-}): { accessToken: string; refreshToken: string } => {
-  const payload: JWTPayload = {
-    id: user.id,
-    email: user.email,
-    username: user.username,
-    role: user.role,
-  };
-
-  const accessTokenOptions: SignOptions = {
-    expiresIn: config.jwt.expiresIn,
-  };
-
-  const refreshTokenOptions: SignOptions = {
-    expiresIn: config.jwt.refreshExpiresIn,
-  };
-
-  const accessToken = jwt.sign(payload, config.jwt.secret, accessTokenOptions);
-  const refreshToken = jwt.sign({ id: user.id }, config.jwt.secret, refreshTokenOptions);
-
-  return { accessToken, refreshToken };
-};
-
-export const verifyRefreshToken = (token: string): { id: string } | null => {
-  try {
-    const decoded = jwt.verify(token, config.jwt.secret) as { id: string };
-    return decoded;
-  } catch (error) {
-    logger.warn('Invalid refresh token:', error);
-    return null;
-  }
-};
-
-export const setAuthCookies = (res: any, accessToken: string, refreshToken: string) => {
-  res.setHeader('Set-Cookie', [
-    'accessToken=' + accessToken + '; HttpOnly; Max-Age=604800; Path=/',
-    'refreshToken=' + refreshToken + '; HttpOnly; Max-Age=2592000; Path=/'
-  ]);
-};
-
-export const clearAuthCookies = (res: any) => {
-  res.setHeader('Set-Cookie', [
-    'accessToken=; HttpOnly; Max-Age=0; Path=/',
-    'refreshToken=; HttpOnly; Max-Age=0; Path=/'
-  ]);
-};
+export default authenticateToken;

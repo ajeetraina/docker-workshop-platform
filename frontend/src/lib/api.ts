@@ -28,6 +28,9 @@ const api = axios.create({
   },
 });
 
+// Flag to prevent infinite refresh loops
+let isRefreshing = false;
+
 // Request interceptor to add auth token
 api.interceptors.request.use(
   (config) => {
@@ -42,7 +45,7 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor for error handling
+// Response interceptor for error handling - FIXED to prevent loops
 api.interceptors.response.use(
   (response: AxiosResponse) => {
     return response;
@@ -60,24 +63,31 @@ api.interceptors.response.use(
     // Handle specific error cases
     switch (status) {
       case 401:
-        // Unauthorized - try to refresh token
-        if (data?.code !== 'REFRESH_TOKEN_INVALID') {
+        // FIXED: Only try refresh if we have a refresh token and aren't already refreshing
+        const refreshToken = Cookies.get('refreshToken');
+        
+        if (!isRefreshing && refreshToken && data?.code !== 'REFRESH_TOKEN_INVALID') {
           try {
+            isRefreshing = true;
             await authApi.refreshToken();
+            isRefreshing = false;
             // Retry the original request
             return api.request(error.config!);
           } catch (refreshError) {
-            // Refresh failed, redirect to login
+            isRefreshing = false;
+            // Refresh failed, clear tokens and redirect
             Cookies.remove('accessToken');
             Cookies.remove('refreshToken');
             window.location.href = '/login';
             return Promise.reject(refreshError);
           }
         } else {
-          // Refresh token is invalid, redirect to login
+          // No refresh token or already refreshing, just clear and redirect
           Cookies.remove('accessToken');
           Cookies.remove('refreshToken');
-          window.location.href = '/login';
+          if (!window.location.pathname.includes('/login')) {
+            window.location.href = '/login';
+          }
         }
         break;
         
@@ -113,22 +123,57 @@ api.interceptors.response.use(
 export const authApi = {
   async login(data: LoginRequest): Promise<AuthResponse> {
     const response = await api.post<AuthResponse>('/auth/login', data);
+    
+    // Store tokens after successful login
+    if (response.data.accessToken) {
+      Cookies.set('accessToken', response.data.accessToken);
+    }
+    if (response.data.refreshToken) {
+      Cookies.set('refreshToken', response.data.refreshToken);
+    }
+    
     return response.data;
   },
   
   async register(data: RegisterRequest): Promise<AuthResponse> {
     const response = await api.post<AuthResponse>('/auth/register', data);
+    
+    // Store tokens after successful registration
+    if (response.data.accessToken) {
+      Cookies.set('accessToken', response.data.accessToken);
+    }
+    if (response.data.refreshToken) {
+      Cookies.set('refreshToken', response.data.refreshToken);
+    }
+    
     return response.data;
   },
   
   async logout(): Promise<void> {
-    await api.post('/auth/logout');
+    try {
+      await api.post('/auth/logout');
+    } catch (error) {
+      // Ignore logout errors
+    }
     Cookies.remove('accessToken');
     Cookies.remove('refreshToken');
   },
   
   async refreshToken(): Promise<{ accessToken: string }> {
-    const response = await api.post<{ accessToken: string }>('/auth/refresh');
+    const refreshToken = Cookies.get('refreshToken');
+    if (!refreshToken) {
+      throw new Error('No refresh token available');
+    }
+    
+    const response = await api.post<{ accessToken: string }>('/auth/refresh', {
+      refreshToken
+    });
+    
+    // Update the access token
+    if (response.data.accessToken) {
+      Cookies.set('accessToken', response.data.accessToken);
+    }
+    
     return response.data;
   },
   
